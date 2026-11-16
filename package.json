@@ -1,0 +1,9 @@
+{
+  "name": "tang-lang-dao-site",
+  "private": true,
+  "description": "Site do Instituto Tang Lang Dao. Só a função do contador de visitas usa dependência.",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}

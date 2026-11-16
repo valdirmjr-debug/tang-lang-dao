@@ -14,7 +14,17 @@
     menu.setAttribute("aria-expanded", a);
     menu.textContent = a ? "Fechar" : "Menu";
   });
-  addEventListener("keydown", function (e) { if (e.key === "Escape" && nav.classList.contains("aberto")) { menu.click(); menu.focus(); } });
+  /* submenus: abrem ao passar o mouse (CSS) ou ao clicar na seta */
+  function fechaSubs(exceto) { $$(".nav__grupo.aberto").forEach(function (g) { if (g !== exceto) { g.classList.remove("aberto"); $(".nav__abre", g).setAttribute("aria-expanded", "false"); } }); }
+  $$(".nav__abre").forEach(function (b) {
+    b.addEventListener("click", function () { var g = b.parentElement, a = !g.classList.contains("aberto"); fechaSubs(g); g.classList.toggle("aberto", a); b.setAttribute("aria-expanded", a); });
+  });
+  document.addEventListener("click", function (e) { if (!e.target.closest(".nav__grupo")) fechaSubs(null); });
+  addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var g = $(".nav__grupo.aberto"); if (g) { fechaSubs(null); $(".nav__abre", g).focus(); return; }
+    if (nav.classList.contains("aberto")) { menu.click(); menu.focus(); }
+  });
   function rolou() {
     var lim = 40;
     nav.classList.toggle("solido", scrollY > lim);
@@ -43,13 +53,15 @@
   status(); setInterval(status, 60000);
 
   /* ---------- Trajetoria: leva o foco para a mensagem ---------- */
-  var cta = $("#cta-caminho");
-  if (cta) $$(".caminho").forEach(function (b, _, todos) {
-    b.addEventListener("click", function () {
-      todos.forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
-      var f = b.dataset.foco;
-      cta.href = "https://wa.me/5511951577456?text=" + encodeURIComponent("Olá! Vi o site do Instituto Tang Lang Dao e tenho interesse em treinar Kung Fu com foco em " + f + ".");
-      cta.querySelector("span").textContent = "Conversar sobre " + f;
+  $$(".trajetoria[data-modalidade]").forEach(function (sec) {
+    var cta = $(".cta-caminho", sec), mod = sec.dataset.modalidade;
+    if (cta) $$(".caminho", sec).forEach(function (b, _, todos) {
+      b.addEventListener("click", function () {
+        todos.forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+        var f = b.dataset.foco;
+        cta.href = "https://wa.me/5511951577456?text=" + encodeURIComponent("Olá! Vi o site do Instituto Tang Lang Dao e tenho interesse em treinar " + mod + " com foco em " + f + ".");
+        cta.querySelector("span").textContent = "Conversar sobre " + f;
+      });
     });
   });
 
@@ -59,6 +71,16 @@
     var base = Math.atan2(dy, dx), cosA = (L1 * L1 + dc * dc - L2 * L2) / (2 * L1 * dc), al = Math.acos(trava(cosA, -1, 1));
     var j = { x: a.x + Math.cos(base + lado * al) * L1, y: a.y + Math.sin(base + lado * al) * L1 };
     return { j: j, p: { x: a.x + dx / d * dc, y: a.y + dy / d * dc } };
+  }
+  /* As patas só abrem de -120° a +120°, medidos a partir da horizontal à esquerda (a frente do louva-deus).
+     Fora desse leque a garra virava do avesso; o alvo é trazido para a borda do leque. */
+  var ABERTURA = 120 * Math.PI / 180;
+  function anguloFrente(s, p) { var a = Math.atan2(p.y - s.y, p.x - s.x) - Math.PI; return Math.atan2(Math.sin(a), Math.cos(a)); }
+  function naAbertura(s, p) {
+    var a = anguloFrente(s, p);
+    if (Math.abs(a) <= ABERTURA) return { x: p.x, y: p.y };
+    var r = Math.hypot(p.x - s.x, p.y - s.y), b = Math.PI + (a > 0 ? ABERTURA : -ABERTURA);
+    return { x: s.x + Math.cos(b) * r, y: s.y + Math.sin(b) * r };
   }
   function Mantis(cv, op) {
     var c = cv.getContext("2d"), W = 0, H = 0, D = 1, an = { x: 0, y: 0, s: 1 };
@@ -101,7 +123,7 @@
       membro(a, k.j, w, w * .55, cor2); membro(k.j, k.p, w * .55, w * .34, cor2); membro(k.p, { x: k.p.x + (pe.x < a.x ? -15 : 15), y: k.p.y + 1 }, w * .34, w * .2, cor2);
     }
     function pata(s, tgt, cor2, corE, lado) {
-      var alvo = { x: tgt.x, y: tgt.y }, dir = Math.atan2(alvo.y - s.y, alvo.x - s.x);
+      var alvo = naAbertura(s, tgt), dir = Math.atan2(alvo.y - s.y, alvo.x - s.x);
       var ext = trava(Math.hypot(alvo.x - s.x, alvo.y - s.y) / 200, 0, 1);
       var repouso = 2.05, ang = mix(repouso, dir < 0 ? dir + Math.PI * 2 : dir, ext * ext * .75);
       var co = { x: s.x + Math.cos(ang) * COX, y: s.y + Math.sin(ang) * COX };
@@ -388,7 +410,8 @@
     });
     io.observe(cvH); visivel.set(cvH, true);
     function bote(alvo, pegou) {
-      var s = mH.ombro, dx = alvo.x - s.x, dy = alvo.y - s.y, d = Math.hypot(dx, dy) || 1, al = Math.min(d, 250);
+      var s = mH.ombro; alvo = naAbertura(s, alvo);
+      var dx = alvo.x - s.x, dy = alvo.y - s.y, d = Math.hypot(dx, dy) || 1, al = Math.min(d, 250);
       var x = dx / d * al, y = dy / d * al;
       mH.golpe([
         { x: -58, y: -4, d: .13, k: 260, h: 14 },
@@ -452,21 +475,40 @@
 
   /* Tai Chi: uma forma lenta em quatro movimentos, feita por chaves e cinemática inversa */
   var FORMA = [
-    /* t, quadril x, y, mão A x, y, mão B x, y, pé A x, altura, pé B x */
+    /* t, quadril x, y, mão A x, y, mão B x, y, pé A x, altura A, pé B x, descida extra do quadril, altura B.
+       Lado A fica à esquerda de quem olha (lado direito da figura); lado B é o lado esquerdo da figura. */
+    /* 起势 início */
     [0, 0, -172, -44, -118, 44, -118, -20, 0, 20], [2, 0, -172, -44, -118, 44, -118, -20, 0, 20],
     [3.4, 14, -170, -44, -122, 44, -122, -40, 15, 20], [4.6, 0, -165, -44, -122, 44, -122, -62, 0, 20],
     [7, 0, -167, -42, -262, 42, -262, -62, 0, 20], [9.5, 0, -148, -46, -178, 46, -178, -62, 0, 20],
-    [11.5, -26, -150, -78, -274, -8, -168, -62, 0, 20], [14, 0, -148, -8, -176, 6, -268, -62, 0, 20],
-    [16.5, 26, -150, 8, -168, 78, -274, -62, 0, 20], [19, 0, -148, 6, -268, -6, -176, -62, 0, 20],
-    [21.5, -26, -150, -78, -274, -8, -168, -62, 0, 20], [23.5, 18, -152, 30, -212, 72, -250, -62, 0, 20],
-    [24.9, 30, -150, 22, -226, 90, -256, -86, 16, 20], [26.2, 10, -146, -40, -236, 112, -258, -108, 0, 20],
-    [27.8, -32, -140, -130, -254, 122, -258, -108, 0, 20], [31, -32, -140, -130, -254, 122, -258, -108, 0, 20],
-    [33, 0, -150, -60, -262, 60, -262, -62, 0, 20], [35, 0, -165, -44, -150, 44, -150, -62, 0, 20],
-    [36.2, 12, -168, -44, -124, 44, -124, -40, 13, 20], [38, 0, -172, -44, -118, 44, -118, -20, 0, 20]
+    /* 站桩 postura universal: joelhos levemente dobrados, mãos na altura do peito, cotovelos levemente dobrados */
+    [11, 0, -150, -38, -212, 38, -212, -62, 0, 20], [13.5, 0, -150, -38, -215, 38, -215, -62, 0, 20],
+    /* 攬雀尾: perna esquerda à frente com o joelho a 90°, perna direita esticada (postura do arqueiro) */
+    [14.8, -16, -152, -40, -206, 40, -206, -62, 0, 40, 0, 16],
+    [16.4, 11, -172, -45, -112, 135, -200, -149, 0, 110, 77, 0], [17.6, 11, -172, -45, -114, 135, -202, -149, 0, 110, 77, 0],
+    /* braço esquerdo vem ao peito, o direito sobe para trás até o ombro */
+    [19, 11, -172, -150, -205, 40, -172, -149, 0, 110, 77, 0], [20, 11, -172, -150, -207, 40, -174, -149, 0, 110, 77, 0],
+    /* junta os braços à frente */
+    [21.4, 11, -172, 0, -182, 22, -176, -149, 0, 110, 77, 0], [22.2, 11, -172, 2, -182, 22, -178, -149, 0, 110, 77, 0],
+    /* volta parado, com braços e pernas afastados */
+    [23.8, 0, -160, -70, -150, 70, -150, -62, 0, 62], [25, 0, -148, -46, -178, 46, -178, -62, 0, 20],
+    /* 云手 mãos de nuvem */
+    [27, -26, -150, -78, -274, -8, -168, -62, 0, 20], [29.5, 0, -148, -8, -176, 6, -268, -62, 0, 20],
+    [32, 26, -150, 8, -168, 78, -274, -62, 0, 20], [34.5, 0, -148, 6, -268, -6, -176, -62, 0, 20],
+    [37, -26, -150, -78, -274, -8, -168, -62, 0, 20],
+    /* 单鞭 chicote simples */
+    [39, 18, -152, 30, -212, 72, -250, -62, 0, 20],
+    [40.4, 30, -150, 22, -226, 90, -256, -86, 16, 20], [41.7, 10, -146, -40, -236, 112, -258, -108, 0, 20],
+    [43.3, -32, -140, -130, -254, 122, -258, -108, 0, 20], [46.5, -32, -140, -130, -254, 122, -258, -108, 0, 20],
+    /* 收势 fechamento */
+    [48.5, 0, -150, -60, -262, 60, -262, -62, 0, 20], [50.5, 0, -165, -44, -150, 44, -150, -62, 0, 20],
+    [51.7, 12, -168, -44, -124, 44, -124, -40, 13, 20], [53.5, 0, -172, -44, -118, 44, -118, -20, 0, 20]
   ];
-  var FORMA_DUR = 38;
+  FORMA.forEach(function (k) { while (k.length < 12) k.push(0); });
+  var FORMA_DUR = 53.5;
   var FORMA_NOMES = [
-    [0, "起势", "Qǐ shì, abertura"], [9.5, "云手", "Yún shǒu, mãos de nuvem"], [23, "单鞭", "Dān biān, chicote simples"], [31.5, "收势", "Shōu shì, fechamento"]
+    [0, "起势", "Qǐ shì, início"], [9.5, "站桩", "Zhàn zhuāng, postura universal"], [13.8, "攬雀尾", "Lǎn què wěi, pegar o pardal pela cauda"],
+    [25, "云手", "Yún shǒu, mãos de nuvem"], [38.5, "单鞭", "Dān biān, chicote simples"], [47, "收势", "Shōu shì, fechamento"]
   ];
   function TaiChi(cv, legenda) {
     var c = cv.getContext("2d"), W = 0, H = 0, D = 1, rastroA = [], rastroB = [], nomeAtual = -1;
@@ -476,7 +518,7 @@
       u = u * u * (3 - 2 * u);
       for (var k = 1; k < b.length; k++) { var m1 = (e[k] - a[k]) * .25, m2 = (f[k] - b[k]) * .25, u2 = u * u, u3 = u2 * u; o[k] = (2 * u3 - 3 * u2 + 1) * b[k] + (u3 - 2 * u2 + u) * m1 + (-2 * u3 + 3 * u2) * e[k] + (u3 - u2) * m2; }
       /* joelhos apenas levemente flexionados, como no Tai Chi */
-      return { px: o[1], py: -172 + (o[2] + 172) * .45, a: { x: o[3], y: o[4] }, b: { x: o[5], y: o[6] }, fa: o[7], la: Math.max(0, o[8]), fb: o[9] };
+      return { px: o[1], py: -172 + (o[2] + 172) * .45 + o[10], a: { x: o[3], y: o[4] }, b: { x: o[5], y: o[6] }, fa: o[7], la: Math.max(0, o[8]), fb: o[9], lb: Math.max(0, o[11]) };
     }
     function articula(o, alvo, L1, L2, ladoFora) {
       var u = ik(o, L1, L2, alvo, 1), v = ik(o, L1, L2, alvo, -1);
@@ -510,10 +552,10 @@
       /* rastro das mãos */
       [rastroA, rastroB].forEach(function (r) { for (var i = 1; i < r.length; i++) { c.strokeStyle = "rgba(210,117,47," + (i / r.length * .55).toFixed(3) + ")"; c.lineWidth = 1 + i / r.length * 5; c.beginPath(); c.moveTo(r[i - 1].x, r[i - 1].y); c.lineTo(r[i].x, r[i].y); c.stroke(); } });
       /* pernas */
-      var PA = { x: p.fa, y: -7 - p.la }, PB = { x: p.fb, y: -7 };
+      var PA = { x: p.fa, y: -7 - p.la }, PB = { x: p.fb, y: -7 - p.lb };
       membro2({ x: Q.x - 15, y: Q.y }, articula({ x: Q.x - 15, y: Q.y }, PA, 84, 84, -1), 25, 18, CALCA, TINTA);
       membro2({ x: Q.x + 15, y: Q.y }, articula({ x: Q.x + 15, y: Q.y }, PB, 84, 84, 1), 25, 18, CALCA, TINTA);
-      c.fillStyle = TINTA; c.beginPath(); c.ellipse(p.fa - 5, -4 - p.la, 18, 6, 0, 0, 7); c.ellipse(p.fb + 5, -4, 18, 6, 0, 0, 7); c.fill();
+      c.fillStyle = TINTA; c.beginPath(); c.ellipse(p.fa - 5, -4 - p.la, 18, 6, 0, 0, 7); c.ellipse(p.fb + 5, -4 - p.lb, 18, 6, 0, 0, 7); c.fill();
       /* casaco */
       c.fillStyle = ROUPA; c.strokeStyle = TINTA; c.lineWidth = 2;
       c.beginPath(); c.moveTo(OE.x - 2, OE.y - 2); c.quadraticCurveTo(tronco, OE.y - 9, OD.x + 2, OD.y - 2);
@@ -532,7 +574,7 @@
       [[OE, ka], [OD, kb]].forEach(function (b) { membro2(b[0], b[1], 21, 17, ROUPA, TINTA); c.fillStyle = PELE; c.strokeStyle = TINTA; c.lineWidth = 2; c.beginPath(); c.arc(b[1].p.x, b[1].p.y, 7.5, 0, 7); c.fill(); c.stroke(); });
       if (!calmo) { rastroA.push({ x: ka.p.x, y: ka.p.y }); rastroB.push({ x: kb.p.x, y: kb.p.y }); if (rastroA.length > 90) { rastroA.shift(); rastroB.shift(); } }
       var n = 0; while (n + 1 < FORMA_NOMES.length && FORMA_NOMES[n + 1][0] <= t) n++;
-      if (n !== nomeAtual) { nomeAtual = n; legenda.innerHTML = '<span class="zh" lang="zh">' + FORMA_NOMES[n][1] + "</span> " + FORMA_NOMES[n][2]; }
+      if (legenda && n !== nomeAtual) { nomeAtual = n; legenda.innerHTML = '<span class="zh" lang="zh">' + FORMA_NOMES[n][1] + "</span> " + FORMA_NOMES[n][2]; }
     }
     var atual = 0;
     function tam() { D = Math.min(devicePixelRatio || 1, 2); W = cv.clientWidth; H = cv.clientHeight; cv.width = Math.round(W * D); cv.height = Math.round(H * D); desenha(atual); }
@@ -544,13 +586,64 @@
     mT = TaiChi(cvT, $("#taichi-legenda"));
     io.observe(cvT); visivel.set(cvT, false);
     var bT = $("#taichi-pausa");
-    if (calmo) { tT = 28; mT.desenha(tT); bT.textContent = "Reproduzir"; }
+    if (calmo) { tT = 44; mT.desenha(tT); bT.textContent = "Reproduzir"; }
     bT.addEventListener("click", function () { tocaT = !tocaT; bT.textContent = tocaT ? "Pausar" : "Reproduzir"; if (tocaT && calmo) requestAnimationFrame(function laco2(ag) { if (!tocaT) return; tT = (tT + 1 / 60) % FORMA_DUR; mT.desenha(tT); requestAnimationFrame(laco2); }); });
   }
 
+  /* Tai Chi nas capas (Sobre Nós, Locais de Treino, Tai Chi): sem legenda e sem pausa */
+  var tcCapas = $$(".capa__taichi").map(function (cv, i) {
+    var m = TaiChi(cv, null), k = { cv: cv, m: m, t: calmo ? 16.8 : i * 7 };
+    io.observe(cv); visivel.set(cv, true); m.desenha(k.t);
+    return k;
+  });
+
+  /* Yin e Yang: as duas metades crescem e diminuem uma dentro da outra */
+  var cvY = $("#tela-yinyang"), yy = null;
+  if (cvY) {
+    yy = (function () {
+      var c = cvY.getContext("2d"), W = 0, H = 0, D = 1, PARES = [["escuridão", "luminosidade"], ["receptividade", "atividade"], ["interioridade", "exterioridade"], ["repouso", "movimento"], ["frio", "calor"]], iPar = 0, tPar = 0;
+      var eYin = $("[data-yin]"), eYang = $("[data-yang]");
+      function tam() { D = Math.min(devicePixelRatio || 1, 2); W = cvY.clientWidth; H = cvY.clientHeight; cvY.width = Math.round(W * D); cvY.height = Math.round(H * D); }
+      new ResizeObserver(function () { tam(); desenha(atual); }).observe(cvY); tam();
+      var atual = 0;
+      function desenha(t) {
+        atual = t; c.setTransform(D, 0, 0, D, 0, 0); c.clearRect(0, 0, W, H);
+        var R = Math.min(W, H) * .44, k = .5 + Math.sin(t * .55) * .2, r1 = R * k, r2 = R * (1 - k);
+        c.translate(W / 2, H / 2); c.rotate(t * .12);
+        c.fillStyle = "#2A332E"; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill();
+        c.fillStyle = "#FBF3E4"; c.beginPath();
+        c.arc(0, 0, R, -Math.PI / 2, Math.PI / 2, false);
+        c.arc(0, R - r2, r2, Math.PI / 2, Math.PI * 1.5, false);
+        c.arc(0, -R + r1, r1, Math.PI / 2, -Math.PI / 2, true);
+        c.closePath(); c.fill();
+        c.fillStyle = "#FBF3E4"; c.beginPath(); c.arc(0, -R + r1, r1 * .27, 0, 7); c.fill();
+        c.fillStyle = "#2A332E"; c.beginPath(); c.arc(0, R - r2, r2 * .27, 0, 7); c.fill();
+        c.strokeStyle = "#A5531B"; c.lineWidth = 3; c.beginPath(); c.arc(0, 0, R + 6, 0, 7); c.stroke();
+      }
+      return {
+        desenha: desenha,
+        passo: function (dt, t) {
+          desenha(t); tPar += dt;
+          if (tPar > 3.2) { tPar = 0; iPar = (iPar + 1) % PARES.length; [eYin, eYang].forEach(function (e, j) { if (!e) return; e.classList.remove("troca"); void e.offsetWidth; e.textContent = PARES[iPar][j]; e.classList.add("troca"); }); }
+        }
+      };
+    })();
+    io.observe(cvY); visivel.set(cvY, false); yy.desenha(.9);
+  }
+
+  /* Por que esse nome: cada trecho de 螳螂道武术协会 */
+  var partes = $$(".nome__parte"), autoNome = 4.5, tocouNome = false;
+  function mostraNome(n) {
+    partes.forEach(function (b) { b.setAttribute("aria-pressed", +b.dataset.n === n); });
+    $$(".nome__lista li").forEach(function (li) { li.classList.toggle("ativo", +li.dataset.n === n); });
+  }
+  partes.forEach(function (b) { b.addEventListener("click", function () { tocouNome = true; mostraNome(+b.dataset.n); }); });
+  var palcoNome = $(".nome__palco"); if (palcoNome) { io.observe(palcoNome); visivel.set(palcoNome, false); }
+
   /* Um louva-a-deus em cada capa */
   function boteEm(m, p) {
-    var s = m.ombro, dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy) || 1, al = Math.min(d, 250), x = dx / d * al, y = dy / d * al;
+    var s = m.ombro; p = naAbertura(s, p);
+    var dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy) || 1, al = Math.min(d, 250), x = dx / d * al, y = dy / d * al;
     m.golpe([{ x: -58, y: -4, d: .13, k: 260, h: 14 }, { x: x, y: y, d: .15, k: 3600, h: -34, i: -.12, r2: true }, { x: x * .96, y: y * .96, d: .32, k: 900, h: -30 }, { x: -112, y: 50, d: .4, k: 90, h: 0 }]);
   }
   var capas = $$(".capa__tela").map(function (cv) {
@@ -564,7 +657,7 @@
   });
 
   /* Motor unico */
-  if (!calmo && (mH || mG || mT || capas.length)) {
+  if (!calmo && (mH || mG || mT || capas.length || tcCapas.length || yy || partes.length)) {
     var ant = performance.now();
     (function laco(ag) {
       var dt = Math.min(.033, (ag - ant) / 1000); ant = ag;
@@ -580,7 +673,7 @@
           if (presa.vx > 70) presa.lado = -1; else if (presa.vx < -70) presa.lado = 1;
           mH.olhar({ x: presa.x, y: presa.y });
           var s = mH.ombro;
-          if (!mH.ocupado && espera <= 0 && Math.hypot(presa.x - s.x, presa.y - s.y) < 235) {
+          if (!mH.ocupado && espera <= 0 && Math.hypot(presa.x - s.x, presa.y - s.y) < 235 && Math.abs(anguloFrente(s, presa)) <= ABERTURA) {
             var alvoB = { x: presa.x, y: presa.y };
             mH.golpe([
               { x: -58, y: -4, d: .15, k: 260, h: 14 },
@@ -602,6 +695,9 @@
         if (!tocouG) { autoG -= dt; if (autoG <= 0) seleciona((gAtual + (autoG === -1 ? 0 : 1)) % 12, false); }
         mG.passo(dt); mG.desenha();
       }
+      tcCapas.forEach(function (k) { if (!visivel.get(k.cv)) return; k.t = (k.t + dt) % FORMA_DUR; k.m.desenha(k.t); });
+      if (yy && visivel.get(cvY)) yy.passo(dt, ag / 1000);
+      if (partes.length && !tocouNome && visivel.get(palcoNome)) { autoNome -= dt; if (autoNome <= 0) { autoNome = 4.5; var at = $(".nome__parte[aria-pressed=true]"); mostraNome(((at ? +at.dataset.n : -1) + 1) % partes.length); } }
       capas.forEach(function (k) { if (!visivel.get(k.cv)) return; k.e -= dt; if (k.e <= 0 && !k.m.ocupado) { k.e = 5 + Math.random() * 4; boteEm(k.m, { x: -300 - Math.random() * 90, y: -250 - Math.random() * 90 }); } k.m.passo(dt); k.m.desenha(); });
       requestAnimationFrame(laco);
     })(ant);
@@ -666,6 +762,28 @@
     }
     alvoA.appendChild(svg);
     $$(".filtro").forEach(function (b, _, t) { b.addEventListener("click", function () { t.forEach(function (x) { x.setAttribute("aria-pressed", x === b); }); foca(b.dataset.alvo, false); }); });
+  }
+
+  /* ---------- Contador de visitas (rodapé) ----------
+     Uma visita conta quando a pessoa fica pelo menos 30 s com o site aberto (somando as páginas da mesma sessão).
+     O número mostrado é o total fechado às 6h (horário de Brasília) de cada dia; quem guarda é a função da Netlify. */
+  var vis = $("[data-visitas]");
+  if (vis && /^https?:$/.test(location.protocol)) {
+    var URL_V = "/.netlify/functions/visitas";
+    var mostraV = function (d) { if (d && typeof d.total === "number") { vis.textContent = d.total.toLocaleString("pt-BR") + (d.total === 1 ? " visita" : " visitas") + " ao site · atualizado todo dia às 6h"; vis.hidden = false; } };
+    fetch(URL_V, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(mostraV).catch(function () {});
+    var ss = null; try { ss = sessionStorage; } catch (e) {}
+    var contada = false, seg = 0; try { contada = ss && ss.getItem("tld-contada") === "1"; seg = +(ss && ss.getItem("tld-seg")) || 0; } catch (e) {}
+    if (!contada) {
+      var relogio = setInterval(function () {
+        if (document.visibilityState !== "visible") return;
+        seg++; try { ss && ss.setItem("tld-seg", seg); } catch (e) {}
+        if (seg < 30) return;
+        clearInterval(relogio);
+        try { ss && ss.setItem("tld-contada", "1"); } catch (e) {}
+        fetch(URL_V, { method: "POST" }).catch(function () {});
+      }, 1000);
+    }
   }
 
 /* ---------- As 5 Petalas ---------- */

@@ -1,0 +1,11 @@
+[build]
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
+
+# Áreas do aluno não aparecem em buscadores
+[[headers]]
+  for = "/aulas*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
