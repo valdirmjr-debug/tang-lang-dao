@@ -12,12 +12,50 @@
   };
   function nomeGrau(g) { return g + (g === 10 ? "ª" : "º") + " grau, " + FAIXAS[g][0]; }
 
+  /* ---------------- Planilha do Google ----------------
+     A Lista de Alunos e o Hall da Fama leem a planilha "Site Tang Lang Dao - Alunos e Hall da Fama"
+     (Drive do Valdir, compartilhada como leitura para quem tem o link). Se ela não responder,
+     o site usa os dados salvos em dados-alunos.js e dados-hall.js. */
+  var PLANILHA = "13XxGbYrXXgeMCqHQd-lh7T8QWEN1amcudW_s0VZ86bw";
+  function csv(txt) {
+    var linhas = [], l = [], c = "", q = false;
+    for (var i = 0; i < txt.length; i++) {
+      var ch = txt[i];
+      if (q) { if (ch === '"') { if (txt[i + 1] === '"') { c += '"'; i++; } else q = false; } else c += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ",") { l.push(c); c = ""; }
+      else if (ch === "\n" || ch === "\r") { if (ch === "\r" && txt[i + 1] === "\n") i++; l.push(c); linhas.push(l); l = []; c = ""; }
+      else c += ch;
+    }
+    if (c || l.length) { l.push(c); linhas.push(l); }
+    var cab = (linhas.shift() || []).map(function (h) { return h.trim(); });
+    return linhas.filter(function (r) { return r.some(function (v) { return v.trim(); }); }).map(function (r) { var o = {}; cab.forEach(function (h, k) { o[h] = (r[k] || "").trim(); }); return o; });
+  }
+  function aba(nome) {
+    var ctl = window.AbortController ? new AbortController() : null, t = ctl && setTimeout(function () { ctl.abort(); }, 5000);
+    return fetch("https://docs.google.com/spreadsheets/d/" + PLANILHA + "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(nome), { cache: "no-store", signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { if (t) clearTimeout(t); if (!r.ok) throw 0; return r.text(); })
+      .then(function (txt) { if (/^\s*</.test(txt)) throw 0; return csv(txt); });
+  }
+  function num(v) { var n = parseInt(v, 10); return isNaN(n) ? 0 : n; }
+
   /* ---------------- Lista de alunos ---------------- */
   var lista = $("#lista-alunos");
   if (lista && window.TLD_ALUNOS) {
-    var D = window.TLD_ALUNOS, sit = "todos", mod = "todas", busca = "";
+    lista.setAttribute("aria-busy", "true");
+    aba("Alunos").then(function (rows) {
+      var al = rows.filter(function (r) { return r["Nome"]; }).map(function (r) {
+        return { n: r["Nome"], kf: num(r["Grau Kung Fu"]) || null, tc: num(r["Grau Tai Chi"]) || null, a: !/^inativ/i.test(r["Situação"] || "") };
+      });
+      if (!al.length) throw 0;
+      iniciaAlunos({ alunos: al, auto: true });
+    }).catch(function () { iniciaAlunos(window.TLD_ALUNOS); });
+  }
+  function iniciaAlunos(D) {
+    lista.removeAttribute("aria-busy");
+    var sit = "todos", mod = "todas", busca = "";
     var alunos = D.alunos.slice().sort(function (a, b) { return a.n.localeCompare(b.n, "pt-BR"); });
-    $("#atualizado-alunos").textContent = "Lista atualizada em " + D.atualizado + ".";
+    $("#atualizado-alunos").textContent = D.auto ? "Lista atualizada automaticamente." : "Lista atualizada em " + D.atualizado + ".";
     function faixa(g, rot) {
       var s = el("span", "tabuleta__faixa");
       var f = el("span", "faixa faixa--" + g); f.setAttribute("aria-hidden", "true"); s.appendChild(f);
@@ -55,7 +93,19 @@
   /* ---------------- Hall da fama ---------------- */
   var lAtletas = $("#atletas");
   if (lAtletas && window.TLD_HALL) {
-    var HF = window.TLD_HALL;
+    Promise.all([aba("Resultados"), aba("Atletas")]).then(function (r) {
+      var ev = r[0].filter(function (e) { return e["Atleta"] && e["Evento"]; }).map(function (e) { return { e: e["Evento"], l: e["Liga"], n: e["Atleta"], c: e["Categoria"], p: e["Posição"] }; });
+      if (!ev.length) throw 0;
+      var at = {};
+      r[1].forEach(function (a) { if (a["Atleta"]) at[a["Atleta"]] = { n: a["Atleta"], mu: num(a["Municipal"]), es: num(a["Estadual"]), na: num(a["Nacional"]), in: num(a["Internacional"]), ou: 0, pr: 0, br: 0 }; });
+      ev.forEach(function (e) {
+        var a = at[e.n] || (at[e.n] = { n: e.n, mu: 0, es: 0, na: 0, in: 0, ou: 0, pr: 0, br: 0 });
+        var p = (e.p || "").toLowerCase(); if (p === "ouro") a.ou++; else if (p === "prata") a.pr++; else if (p === "bronze") a.br++;
+      });
+      iniciaHall({ atletas: Object.keys(at).map(function (k) { return at[k]; }), eventos: ev });
+    }).catch(function () { iniciaHall(window.TLD_HALL); });
+  }
+  function iniciaHall(HF) {
     var atl = HF.atletas.slice().sort(function (a, b) { return b.ou - a.ou || b.pr - a.pr || b.br - a.br || (b.mu + b.es + b.na + b.in) - (a.mu + a.es + a.na + a.in); });
     var tot = { ou: 0, pr: 0, br: 0 }; atl.forEach(function (a) { tot.ou += a.ou; tot.pr += a.pr; tot.br += a.br; });
     var placar = $("#placar");
